@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Wagony i rozjazd — v16</title>
+  <title>Wagony i rozjazd — v17 logged</title>
   <style>
     /* ── Design tokens ───────────────────────────────────── */
     :root{
@@ -24,16 +24,15 @@
 
       --trackThickness: 10px;
 
-      --carW: auto;   /* expands to fit content — see .car min/max-width */
+      --carW: auto;
       --carH: 30px;
       --gap: 10px;
 
-      /* ── Animation constants (tune here) ── */
-      --animSpeed: 1.28;   /* px/ms — higher = faster */
-      --animMinDur: 260;   /* ms */
-      --animMaxDur: 860;   /* ms */
-      --pushDelay: 140;    /* ms */
-      --releaseDelay: 180; /* ms */
+      --animSpeed: 1.28;
+      --animMinDur: 260;
+      --animMaxDur: 860;
+      --pushDelay: 140;
+      --releaseDelay: 180;
       --gapCloseDelay: 140;
     }
 
@@ -48,7 +47,6 @@
       box-shadow:0 10px 28px rgba(0,0,0,.09);
     }
 
-    /* ── Yard ───────────────────────────────────────────── */
     .yard{
       position:relative;
       height:420px;
@@ -144,7 +142,6 @@
     .label.right { left: var(--switchX); top: calc(var(--yMain)   - 70px); }
     .label.siding{ left: var(--switchX); top: calc(var(--ySiding) - 70px); }
 
-    /* ── Car rows ────────────────────────────────────────── */
     .carsRow{
       position:absolute;
       display:flex;
@@ -176,7 +173,6 @@
       justify-content:flex-start;
     }
 
-    /* ── Car element ─────────────────────────────────────── */
     .car{
       min-width: 34px;
       max-width: 68px;
@@ -215,7 +211,6 @@
     .car.right  { background:#d1fae5; }
     .car.siding { background:#ffedd5; }
 
-    /* ── Mini-magazyn ────────────────────────────────────── */
     .mag{
       position:absolute;
       right: 14px;
@@ -262,7 +257,6 @@
       line-height: 1.2;
     }
 
-    /* ── Status (aria-live) ──────────────────────────────── */
     #statusMsg{
       position:absolute;
       left: 18px; bottom: 12px;
@@ -276,7 +270,6 @@
       transition: opacity 300ms;
     }
 
-    /* ── Controls ────────────────────────────────────────── */
     .controls{
       margin-top: 14px;
       display:flex;
@@ -304,7 +297,6 @@
       max-width: 760px;
     }
 
-    /* ── Flying car ──────────────────────────────────────── */
     .fly{
       position: fixed;
       left: 0; top: 0;
@@ -337,18 +329,16 @@
     .fly::before{ left: 9px; }
     .fly::after { right: 9px; }
 
-    /* ── Undo button ─────────────────────────────────────── */
     #btnUndo{ background:#1e3a5f; }
   </style>
 </head>
 <body>
 
-<!-- Accessible live region for screen readers -->
 <div aria-live="polite" aria-atomic="true" class="sr-only" id="ariaStatus"
      style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;"></div>
 
 <div class="wrap">
-  <h1>Wagony na torach (v16 — start lewego toru z URL: <code>?left=abcdef</code>)</h1>
+  <h1>Wagony na torach (v17 — logging + Qualtrics + warunki z URL)</h1>
 
   <div class="panel">
     <div class="yard" role="region" aria-label="Plac manewrowy z torami i wagonami">
@@ -360,9 +350,8 @@
       <div class="ties main"></div>
       <div class="ties siding"></div>
 
-      <svg class="connector" viewBox="0 0 1000 420" preserveAspectRatio="none" aria-hidden="true">
+      <svg id="connectorSvg" class="connector" aria-hidden="true">
         <path id="sidingPath"
-              d="M 500 140 C 455 170, 435 235, 500 325 L 980 325"
               fill="none"
               stroke="#9aa3b2"
               stroke-width="10"
@@ -402,8 +391,8 @@
       <button id="btnUndo">Cofnij (Undo)</button>
 
       <div class="hintText">
-        Start lewego toru ustawisz w URL: <code>?left=abcdef</code> (lub <code>?l=abcdef</code>).
-        Obsługiwane znaki: litery a–z i cyfry 0–9.
+        URL: <code>?participant_id=ABC&condition=A&task_id=task_01&left=abbcdde</code>.
+        Parametr <code>left</code> ma pierwszeństwo nad bankiem zadań.
       </div>
     </div>
   </div>
@@ -411,40 +400,167 @@
 
 <script>
   /* ═══════════════════════════════════════════════════════
-     Google Sheets logging — paste your Apps Script URL here.
-     Leave as "" to disable. See google-logger.gs for setup.
+     Google Sheets logging
+
+     Ten plik wysyła dane metodą GET do Google Apps Script.
+     Apps Script musi mieć funkcję doGet(e), która zapisuje parametry do arkusza.
      ═══════════════════════════════════════════════════════ */
-  const SHEETS_URL = "https://script.google.com/macros/library/d/1Z3OITyXJUH5w2KNnbXhrxy0BdbxxTqvAvnsWWaNqVqfKlPXec_ok63XO/2";
+  const SHEETS_URL = "https://script.google.com/macros/s/AKfycbyfZA0eCSsrID4_ohJKOjmQXsXZtcHk9DXX-OZHDTO3SB9Ir4DbxP1wCvvujlKpcDdyjA/exec";
 
   /* ═══════════════════════════════════════════════════════
-     Animation constants — tune all timings in one place
+     Animation constants
      ═══════════════════════════════════════════════════════ */
   const ANIM = {
-    speed:        1.28,   // px per ms — higher = faster cars
-    minDur:       260,    // ms minimum per leg
-    maxDur:       860,    // ms maximum per leg
-    pushDelay:    140,    // ms to wait after pushing existing cars
-    releaseDelay: 180,    // ms to wait after releasing push
-    gapClose:     140,    // ms for gap-close nudge
-    gapRelease:   120,    // ms after gap-close
-    fallback:     60,     // extra ms added to duration for transitionend fallback
+    speed:        1.28,
+    minDur:       260,
+    maxDur:       860,
+    pushDelay:    140,
+    releaseDelay: 180,
+    gapClose:     140,
+    gapRelease:   120,
+    fallback:     60,
   };
 
   /* ═══════════════════════════════════════════════════════
+     URL / Qualtrics / task context
+
+     Przykłady:
+     ?participant_id=${e://Field/ResponseID}&condition=A&task_id=task_01
+     ?participant_id=${e://Field/ResponseID}&condition=A&task_id=task_01&left=abbcdde
+     ═══════════════════════════════════════════════════════ */
+  const URL_PARAMS = new URLSearchParams(window.location.search);
+
+  const EXPERIMENT = {
+    participant_id:
+      URL_PARAMS.get("participant_id") ||
+      URL_PARAMS.get("ParticipantID") ||
+      URL_PARAMS.get("PROLIFIC_PID") ||
+      URL_PARAMS.get("ResponseID") ||
+      URL_PARAMS.get("response_id") ||
+      "anonymous",
+
+    condition:
+      URL_PARAMS.get("condition") ||
+      URL_PARAMS.get("cond") ||
+      "default",
+
+    task_id:
+      URL_PARAMS.get("task_id") ||
+      URL_PARAMS.get("task") ||
+      "default_task",
+
+    session_id: getSessionId()
+  };
+
+  /*
+    Bank zadań. Możesz go dowolnie zmienić.
+    Jeśli w URL jest &left=..., aplikacja użyje left zamiast banku zadań.
+  */
+  const TASK_BANK = {
+    default: {
+      default_task: "abcdef"
+    },
+
+    A: {
+      task_01: "abcdef",
+      task_02: "abbcdde",
+      task_03: "1223445"
+    },
+
+    B: {
+      task_01: "aabbccd",
+      task_02: "abcddde",
+      task_03: "1122334"
+    }
+  };
+
+  function getSessionId() {
+    let id = localStorage.getItem("wagony_session_id");
+
+    if (!id) {
+      id = crypto.randomUUID
+        ? crypto.randomUUID()
+        : "session_" + Date.now() + "_" + Math.random().toString(36).slice(2);
+
+      localStorage.setItem("wagony_session_id", id);
+    }
+
+    return id;
+  }
+
+  /* ═══════════════════════════════════════════════════════
      State
+     Wagons are objects: { id, label }
      ═══════════════════════════════════════════════════════ */
   let left    = [];
   let right   = [];
   let siding  = [];
   let animating = false;
+  let wagonCounter = 0;
 
-  // History stack for undo — each entry is a snapshot
   const MAX_HISTORY = 30;
   const history = [];
 
+  function makeWagon(label) {
+    wagonCounter += 1;
+
+    return {
+      id: `w_${String(wagonCounter).padStart(4, "0")}_${label}`,
+      label: String(label)
+    };
+  }
+
+  function cloneWagon(wagon) {
+    return {
+      id: wagon.id,
+      label: wagon.label
+    };
+  }
+
+  function cloneTrack(track) {
+    return track.map(cloneWagon);
+  }
+
   function snapshot() {
-    history.push({ left: [...left], right: [...right], siding: [...siding] });
+    history.push({
+      left: cloneTrack(left),
+      right: cloneTrack(right),
+      siding: cloneTrack(siding)
+    });
+
     if (history.length > MAX_HISTORY) history.shift();
+  }
+
+  function serializeTrack(track) {
+    return track.map(w => `${w.id}:${w.label}`).join("|");
+  }
+
+  function serializeLabels(track) {
+    return track.map(w => w.label).join("");
+  }
+
+  function serializeState() {
+    return {
+      left: serializeTrack(left),
+      right: serializeTrack(right),
+      siding: serializeTrack(siding),
+      left_labels: serializeLabels(left),
+      right_labels: serializeLabels(right),
+      siding_labels: serializeLabels(siding)
+    };
+  }
+
+  function getInitialLeftString() {
+    const explicitLeft = URL_PARAMS.get("left") ?? URL_PARAMS.get("l");
+
+    if (explicitLeft) {
+      return explicitLeft;
+    }
+
+    const conditionTasks = TASK_BANK[EXPERIMENT.condition] || TASK_BANK.default;
+    const taskString = conditionTasks[EXPERIMENT.task_id];
+
+    return taskString || TASK_BANK.default.default_task;
   }
 
   /* ═══════════════════════════════════════════════════════
@@ -466,13 +582,11 @@
   };
 
   /* ═══════════════════════════════════════════════════════
-     URL parsing — supports a–z and 0–9, warns on unknown chars
+     URL parsing — supports a-z and 0-9
      ═══════════════════════════════════════════════════════ */
   function parseLeftFromUrl() {
-    const params = new URLSearchParams(window.location.search);
-    const raw    = (params.get("left") ?? params.get("l") ?? "").toLowerCase();
+    const raw = getInitialLeftString().toLowerCase();
 
-    // Warn about characters we're dropping
     const dropped = raw.replace(/[a-z0-9]/g, "");
     if (dropped.length > 0) {
       console.warn(`[wagony] URL param zawiera nieobsługiwane znaki: "${dropped}" — zostaną pominięte.`);
@@ -480,21 +594,35 @@
 
     const letters = raw.replace(/[^a-z0-9]/g, "");
     const arr = letters.split("").filter(Boolean);
-    return arr.length ? arr : ["a","b","c","d","e","f"];
+
+    return arr.length
+      ? arr.map(makeWagon)
+      : ["a", "b", "c", "d", "e", "f"].map(makeWagon);
   }
 
   /* ═══════════════════════════════════════════════════════
      Init & render
      ═══════════════════════════════════════════════════════ */
   function initState() {
+    const stateBefore = serializeState();
+
+    wagonCounter = 0;
     left    = parseLeftFromUrl();
     right   = [];
     siding  = [];
+
     history.length = 0;
     clearTransforms();
     render();
     setStatus("Gotowy");
-    logEvent("reset");
+
+    logEvent("reset", {
+      source_track: "",
+      target_track: "left",
+      wagon: null,
+      state_before: stateBefore,
+      state_after: serializeState()
+    });
   }
 
   function render() {
@@ -518,12 +646,15 @@
 
   function renderTrack(containerEl, arr, cls) {
     containerEl.innerHTML = "";
+
     for (const w of arr) {
       const d = document.createElement("div");
       d.className = `car ${cls}`;
-      d.textContent = w;
+      d.textContent = w.label;
+      d.dataset.wagonId = w.id;
+      d.dataset.wagonLabel = w.label;
       d.setAttribute("role", "listitem");
-      d.setAttribute("aria-label", `Wagon ${w}`);
+      d.setAttribute("aria-label", `Wagon ${w.label}, identyfikator ${w.id}`);
       containerEl.appendChild(d);
     }
   }
@@ -534,12 +665,9 @@
     els.carsSiding.style.transform = "translateX(0px)";
   }
 
-  /* ═══════════════════════════════════════════════════════
-     Status helpers
-     ═══════════════════════════════════════════════════════ */
   function setStatus(msg) {
     els.statusMsg.textContent  = msg;
-    els.ariaStatus.textContent = msg;   // screen-reader announcement
+    els.ariaStatus.textContent = msg;
   }
 
   /* ═══════════════════════════════════════════════════════
@@ -578,7 +706,6 @@
   }
 
   function getCarSize() {
-    // Measure an actual rendered car — works with auto-width cars
     const sample =
       els.carsLeft.firstElementChild  ||
       els.carsRight.firstElementChild ||
@@ -587,7 +714,6 @@
       const r = sample.getBoundingClientRect();
       return { w: r.width, h: r.height };
     }
-    // Fallback if no cars are rendered yet
     return { w: 46, h: parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--carH")) };
   }
 
@@ -603,11 +729,6 @@
     return Math.hypot(b.x - a.x, b.y - a.y);
   }
 
-  /* ═══════════════════════════════════════════════════════
-     FIX 1 — transitionTo with fallback timeout
-     Prevents the Promise from hanging when from === to
-     (browser skips the transition and transitionend never fires)
-     ═══════════════════════════════════════════════════════ */
   function transitionTo(el, from, to, durationMs) {
     return new Promise(resolve => {
       let resolved = false;
@@ -619,21 +740,16 @@
 
       el.style.transition = "none";
       el.style.transform  = `translate(${from.x}px, ${from.y}px)`;
-      el.getBoundingClientRect(); // force reflow
+      el.getBoundingClientRect();
 
       el.style.transition = `transform ${Math.round(durationMs)}ms cubic-bezier(.2,.85,.2,1)`;
       el.style.transform  = `translate(${to.x}px, ${to.y}px)`;
 
       el.addEventListener("transitionend", done, { once: true });
-
-      // Fallback: resolve after duration + buffer even if transitionend never fires
       setTimeout(done, durationMs + ANIM.fallback);
     });
   }
 
-  /* ═══════════════════════════════════════════════════════
-     Push / release helpers
-     ═══════════════════════════════════════════════════════ */
   async function pushExisting(destEl, direction, shouldPush) {
     if (!shouldPush) return;
     const gap  = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--gap"));
@@ -657,9 +773,6 @@
 
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-  /* ═══════════════════════════════════════════════════════
-     FIX 2 — animating flag always reset via try/finally
-     ═══════════════════════════════════════════════════════ */
   async function moveAnimated(fromName, toName) {
     if (animating) return;
     if (fromName === "left"   && left.length   === 0) return;
@@ -673,6 +786,7 @@
 
     animating = true;
     snapshot();
+    const stateBefore = serializeState();
     render();
 
     try {
@@ -680,7 +794,6 @@
       if (!sourceEl) return;
 
       const startRect = sourceEl.getBoundingClientRect();
-
       const insertAtFront = (toName === "right" || toName === "siding");
       const targetRect    = measureTargetRect(toEl, insertAtFront);
 
@@ -690,7 +803,6 @@
 
       sourceEl.style.visibility = "hidden";
 
-      // Create flying car
       const fly = document.createElement("div");
       fly.className  = `fly ${fromName === "left" ? "left" : "siding"}`;
       fly.textContent = sourceEl.textContent;
@@ -698,12 +810,10 @@
 
       setStatus(`Wagon "${fly.textContent}" jedzie: ${fromName} → ${toName}`);
 
-      // Leg 1: source → switch
       const d1 = dist(start, sw);
       const t1 = Math.min(ANIM.maxDur, Math.max(ANIM.minDur, d1 / ANIM.speed));
       await transitionTo(fly, start, sw, t1);
 
-      // Push existing cars in destination
       let shouldPush = false;
       let pushDir    = +1;
       if (toName === "right" || toName === "siding") {
@@ -715,19 +825,24 @@
       }
       await pushExisting(toEl, pushDir, shouldPush);
 
-      // Leg 2: switch → destination slot
       const d2 = dist(sw, target);
       const t2 = Math.min(ANIM.maxDur, Math.max(ANIM.minDur, d2 / ANIM.speed));
       await transitionTo(fly, sw, target, t2);
 
       fly.remove();
 
-      // Commit state
       const w = removeFromSource(fromName);
       insertIntoDestination(toName, w);
 
-      setStatus(`Wagon "${w}" → ${toName}`);
-      logEvent("move", { from: fromName, to: toName, wagon: w });
+      setStatus(`Wagon "${w.label}" → ${toName}`);
+
+      logEvent("move", {
+        wagon: w,
+        source_track: fromName,
+        target_track: toName,
+        state_before: stateBefore,
+        state_after: serializeState()
+      });
 
       render();
       await releasePush(toEl, shouldPush);
@@ -742,19 +857,29 @@
   /* ═══════════════════════════════════════════════════════
      Siding helpers
      ═══════════════════════════════════════════════════════ */
-  function getRightmostSidingCarEl()    { return els.carsSiding.lastElementChild; }
-  function getRightmostSidingLetter()   { return getRightmostSidingCarEl()?.textContent ?? null; }
+  function getRightmostSidingCarEl() { return els.carsSiding.lastElementChild; }
+
+  function getRightmostSidingWagon() {
+    return siding.length ? siding[siding.length - 1] : null;
+  }
+
+  function getRightmostSidingLetter() {
+    return getRightmostSidingWagon()?.label ?? null;
+  }
 
   async function cloneRightmostOnSiding() {
     if (animating || siding.length === 0) return;
 
     animating = true;
     snapshot();
+    const stateBefore = serializeState();
     render();
 
     try {
-      const letter = getRightmostSidingLetter();
-      if (!letter) return;
+      const sourceWagon = getRightmostSidingWagon();
+      if (!sourceWagon) return;
+
+      const letter = sourceWagon.label;
 
       const magRect = els.magCar.getBoundingClientRect();
       const start   = { x: magRect.left, y: magRect.top };
@@ -762,7 +887,6 @@
       const shouldPush = els.carsSiding.childElementCount > 0;
       await pushExisting(els.carsSiding, +1, shouldPush);
 
-      // Measure placeholder at the end of siding
       const targetRect = measureTargetRect(els.carsSiding, false);
       const target     = { x: targetRect.left, y: targetRect.top };
 
@@ -775,9 +899,21 @@
       await transitionTo(fly, start, target, 520);
       fly.remove();
 
-      siding.push(letter);
+      const newWagon = makeWagon(letter);
+      siding.push(newWagon);
+
       setStatus(`Kopia wagonu "${letter}" dodana na bocznicę`);
-      logEvent("clone", { wagon: letter });
+
+      logEvent("clone", {
+        wagon: newWagon,
+        source_track: "mini_storage",
+        target_track: "siding",
+        source_wagon_id: sourceWagon.id,
+        source_wagon_label: sourceWagon.label,
+        state_before: stateBefore,
+        state_after: serializeState()
+      });
+
       render();
       await releasePush(els.carsSiding, shouldPush);
       render();
@@ -793,6 +929,7 @@
 
     animating = true;
     snapshot();
+    const stateBefore = serializeState();
     render();
 
     try {
@@ -815,8 +952,16 @@
       fly.remove();
 
       const removed = siding.pop();
-      setStatus(`Wagon "${removed}" usunięty z bocznicy`);
-      logEvent("remove", { wagon: removed });
+      setStatus(`Wagon "${removed.label}" usunięty z bocznicy`);
+
+      logEvent("remove", {
+        wagon: removed,
+        source_track: "siding",
+        target_track: "removed",
+        state_before: stateBefore,
+        state_after: serializeState()
+      });
+
       render();
       await closeGapAfterRemove(els.carsSiding);
       render();
@@ -832,40 +977,116 @@
      ═══════════════════════════════════════════════════════ */
   function undo() {
     if (animating || history.length === 0) return;
+
+    const stateBefore = serializeState();
     const prev = history.pop();
-    left   = prev.left;
-    right  = prev.right;
-    siding = prev.siding;
+
+    left   = cloneTrack(prev.left);
+    right  = cloneTrack(prev.right);
+    siding = cloneTrack(prev.siding);
+
     clearTransforms();
     render();
     setStatus("Cofnięto ostatnią operację");
-    logEvent("undo");
+
+    logEvent("undo", {
+      source_track: "",
+      target_track: "",
+      wagon: null,
+      state_before: stateBefore,
+      state_after: serializeState()
+    });
   }
 
   /* ═══════════════════════════════════════════════════════
      Google Sheets logger
-     Sends one row per action: timestamp, action, from, to,
-     wagon label, and full state snapshot.
-     Uses no-cors fetch so GitHub Pages works without CORS headers.
+
+     One event row contains:
+     timestamp, session_id, participant_id, task_id, condition,
+     event_type, object_id/wagon_id, object_value/wagon_label,
+     source_track, target_track, state_before, state_after.
      ═══════════════════════════════════════════════════════ */
-  function logEvent(action, extra = {}) {
-    if (!SHEETS_URL) return;   // logging disabled
+  function logEvent(eventType, extra = {}) {
+    if (!SHEETS_URL) return;
+
+    const wagon = extra.wagon || null;
 
     const payload = {
       timestamp: new Date().toISOString(),
-      action,
-      left:   left.join(","),
-      right:  right.join(","),
-      siding: siding.join(","),
-      ...extra,                // e.g. { from: "left", to: "right", wagon: "a" }
+
+      session_id: EXPERIMENT.session_id,
+      participant_id: EXPERIMENT.participant_id,
+      task_id: EXPERIMENT.task_id,
+      condition: EXPERIMENT.condition,
+
+      event_type: eventType,
+
+      object_id: wagon ? wagon.id : "",
+      wagon_id: wagon ? wagon.id : "",
+
+      object_value: wagon ? wagon.label : "",
+      wagon_label: wagon ? wagon.label : "",
+
+      source_track: extra.source_track || "",
+      target_track: extra.target_track || "",
+
+      state_before: extra.state_before
+        ? JSON.stringify(extra.state_before)
+        : "",
+
+      state_after: extra.state_after
+        ? JSON.stringify(extra.state_after)
+        : JSON.stringify(serializeState()),
+
+      left_state: serializeTrack(left),
+      right_state: serializeTrack(right),
+      siding_state: serializeTrack(siding),
+
+      left_labels: serializeLabels(left),
+      right_labels: serializeLabels(right),
+      siding_labels: serializeLabels(siding),
+
+      source_wagon_id: extra.source_wagon_id || "",
+      source_wagon_label: extra.source_wagon_label || "",
+
+      page_url: window.location.href,
+      user_agent: navigator.userAgent
     };
 
-    // We use no-cors so the browser never blocks the request from GitHub Pages.
-    // The Apps Script response is opaque but the data always arrives.
     fetch(SHEETS_URL + "?" + new URLSearchParams(payload).toString(), {
       method: "GET",
-      mode:   "no-cors",
+      mode: "no-cors"
     }).catch(err => console.warn("[wagony] Sheets log failed:", err));
+  }
+
+  /* ═══════════════════════════════════════════════════════
+     SVG connector
+     ═══════════════════════════════════════════════════════ */
+  function updateConnector() {
+    const yard   = document.querySelector(".yard");
+    const yardR  = yard.getBoundingClientRect();
+
+    const sw     = els.switchTip.getBoundingClientRect();
+    const swX    = sw.left - yardR.left + sw.width  / 2;
+
+    const endX   = yardR.width - 18;
+
+    const yMain   = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--yMain"));
+    const ySiding = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--ySiding"));
+
+    const cp1x = swX  - (swX * 0.09);
+    const cp1y = yMain + (ySiding - yMain) * 0.45;
+    const cp2x = swX  - (swX * 0.065);
+    const cp2y = ySiding - 18;
+
+    const d = `M ${swX} ${yMain} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${swX} ${ySiding} L ${endX} ${ySiding}`;
+
+    const svg  = document.getElementById("connectorSvg");
+    svg.setAttribute("viewBox", `0 0 ${yardR.width} ${yardR.height}`);
+    svg.setAttribute("width",  yardR.width);
+    svg.setAttribute("height", yardR.height);
+
+    document.getElementById("sidingPath").setAttribute("d", d);
   }
 
   /* ═══════════════════════════════════════════════════════
@@ -880,7 +1101,6 @@
   els.btnRemoveSiding.addEventListener("click", removeRightmostFromSiding);
   els.btnUndo.addEventListener        ("click", undo);
 
-  // Keyboard shortcut: Ctrl+Z / Cmd+Z
   document.addEventListener("keydown", e => {
     if ((e.ctrlKey || e.metaKey) && e.key === "z") {
       e.preventDefault();
@@ -892,6 +1112,9 @@
      Boot
      ═══════════════════════════════════════════════════════ */
   initState();
+
+  requestAnimationFrame(updateConnector);
+  window.addEventListener("resize", () => requestAnimationFrame(updateConnector));
 </script>
 </body>
 </html>
